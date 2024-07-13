@@ -48,6 +48,7 @@ export default function Home() {
 
   const handleDrag = (e, data) => {
     setPosition({ x: data.x, y: data.y });
+    recordAction("position");
   };
 
   const handlePlay = () => {
@@ -73,6 +74,7 @@ export default function Home() {
   };
 
   const handleSeekChange = (e) => {
+    recordAction("seek");
     setPlayerState({ ...playerState, played: parseFloat(e.target.value) });
   };
 
@@ -86,6 +88,46 @@ export default function Home() {
   const handleProgess = (state) => {
     if (!playerState.seeking) {
       setPlayerState({ ...playerState, played: state.played });
+    }
+  };
+
+  const [actionList, setActionList] = useState([]);
+
+  const recordAction = (action) => {
+    console.log("Action Recorded", action);
+
+    const currentAction = {
+      timeStamps: playerState.played,
+      cooridinates: position,
+      volume: playerState.volume,
+      playBackRate: playerState.playbackRate,
+      action,
+    };
+
+    switch (action) {
+      case "play":
+        setActionList([...actionList, currentAction]);
+        break;
+      case "pause":
+        setActionList([...actionList, currentAction]);
+        break;
+      case "volume":
+        setActionList([...actionList, currentAction]);
+        break;
+      case "speed":
+        setActionList([...actionList, currentAction]);
+        break;
+      case "seek":
+        setActionList([...actionList, currentAction]);
+        break;
+      case "aspectRatio":
+        setActionList([...actionList, currentAction]);
+        break;
+      case "position":
+        setActionList([...actionList, currentAction]);
+        break;
+      default:
+        break;
     }
   };
 
@@ -162,12 +204,13 @@ export default function Home() {
                   <div className="flex gap-2 items-center w-full ">
                     <Image
                       className="cursor-pointer"
-                      onClick={() =>
+                      onClick={() => {
+                        recordAction(playerState.playing ? "pause" : "play");
                         setPlayerState({
                           ...playerState,
                           playing: !playerState.playing,
-                        })
-                      }
+                        });
+                      }}
                       src={PlayImage}
                       alt="Pause Play Control"
                     />
@@ -208,12 +251,13 @@ export default function Home() {
                         max={1}
                         step={0.1}
                         value={playerState.volume}
-                        onChange={(e) =>
+                        onChange={(e) => {
                           setPlayerState({
                             ...playerState,
                             volume: parseFloat(e.target.value),
-                          })
-                        }
+                          });
+                          recordAction("volume");
+                        }}
                       />
                     </div>
                   </div>
@@ -224,12 +268,13 @@ export default function Home() {
                     <select
                       className="border-1 border-[#45474E] text-[white] px-[10px] py-[7px] bg-transparent"
                       value={playerState.playbackRate}
-                      onChange={(e) =>
+                      onChange={(e) => {
                         setPlayerState({
                           ...playerState,
                           playbackRate: parseFloat(e.target.value),
-                        })
-                      }
+                        });
+                        recordAction("speed");
+                      }}
                     >
                       {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((value) => (
                         <option
@@ -253,6 +298,7 @@ export default function Home() {
                           width: cropSize.height * aspectRatio,
                           height: cropSize.height,
                         });
+                        recordAction("aspectRatio");
                       }}
                     >
                       <option value={(16 / 9).toFixed(2)}>16:9</option>
@@ -319,7 +365,13 @@ export default function Home() {
                   >
                     Remove Cropper
                   </button>
-                  <button className="bg-[#7C36D6] text-white text-sm font-medium px-4 py-2 rounded-[10px]">
+                  <button
+                    onClick={() => {
+                      console.log(actionList);
+                    }}
+                    disabled={actionList.length == 0}
+                    className="bg-[#7C36D6] text-white text-sm font-medium px-4 py-2 rounded-[10px] disabled:opacity-50"
+                  >
                     Generate Preview
                   </button>
                 </div>
