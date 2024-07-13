@@ -319,28 +319,30 @@ export default function Home() {
               >
                 <span>Preview</span>
 
-                {cropper ? (
-                  <div
+                <div
+                  style={{
+                    width: cropSize.width,
+                    visibility: cropper ? "visible" : "hidden",
+                  }}
+                  className="overflow-hidden h-[307px]"
+                >
+                  <ReactPlayer
                     style={{
-                      width: cropSize.width,
+                      marginLeft: `-${position.x}px`,
                     }}
-                    className="overflow-hidden h-[307px]"
-                  >
-                    <ReactPlayer
-                      style={{
-                        marginLeft: `-${position.x}px`,
-                      }}
-                      // width={position.x}
-                      ref={secondPlayer}
-                      muted={true}
-                      url={playerState.url}
-                      played={playerState.played}
-                      playbackRate={playerState.playbackRate}
-                      playing={playerState.playing}
-                      controls={false}
-                    />
-                  </div>
-                ) : (
+                    // width={position.x}
+                    ref={secondPlayer}
+                    height={"307px"}
+                    muted={true}
+                    url={playerState.url}
+                    played={playerState.played}
+                    playbackRate={playerState.playbackRate}
+                    playing={playerState.playing}
+                    controls={false}
+                  />
+                </div>
+
+                {!cropper && (
                   <div className="h-full flex items-center justify-center w-full">
                     <Image src={PreviewImage} alt="Preview Image" />
                   </div>
@@ -348,6 +350,8 @@ export default function Home() {
               </div>
             </div>
           )}
+
+          {tab == "generate" && <div className="h-full px-4">Generate</div>}
           <div className="border-[#494C55] w-full border-t-[1px] p-4 flex justify-between items-end">
             {tab == "preview" ? (
               <>
