@@ -30,7 +30,7 @@ export default function Home() {
     url: "./video2.mp4",
     pip: false,
     playing: false,
-    controls: true,
+    controls: false,
     light: false,
     volume: 0.8,
     muted: false,
@@ -71,11 +71,15 @@ export default function Home() {
 
   const handleSeekMouseDown = (e) => {
     setPlayerState({ ...playerState, seeking: true });
+    playerRef.current.seekTo(parseFloat(e.target.value));
+    secondPlayer.current.seekTo(parseFloat(e.target.value));
   };
 
   const handleSeekChange = (e) => {
     recordAction("seek");
     setPlayerState({ ...playerState, played: parseFloat(e.target.value) });
+    playerRef.current.seekTo(parseFloat(e.target.value));
+    secondPlayer.current.seekTo(parseFloat(e.target.value));
   };
 
   const handleSeekMouseUp = (e) => {
