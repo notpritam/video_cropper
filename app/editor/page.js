@@ -204,3 +204,49 @@ export default function Home() {
     </>
   );
 }
+
+const cropVideo = async () => {
+  if (typeof window !== "undefined") {
+    const ffmpeg = createFFmpeg({ log: true });
+
+    await ffmpeg.load();
+    const inputFile = playerState.url;
+    const cropX = position.x;
+    const cropWidth = cropSize.width;
+
+    // Get the video element and its dimensions
+    const videoElement = playerRef.current.getInternalPlayer();
+    const videoWidth = videoElement.videoWidth;
+    const videoHeight = videoElement.videoHeight;
+
+    // Calculate the crop width relative to the video's actual width
+    // Adjust cropX to ensure it doesn't exceed videoWidth
+    const adjustedCropX = Math.max(0, Math.min(cropX, videoWidth - cropWidth));
+    const adjustedCropWidth = (cropWidth / 525) * videoWidth;
+
+    console.log(
+      "Crop Video",
+      inputFile,
+      adjustedCropX,
+      adjustedCropWidth,
+      videoHeight
+    );
+
+    ffmpeg.FS("writeFile", "input.mp4", await fetchFile(inputFile));
+
+    await ffmpeg.run(
+      "-i",
+      "input.mp4",
+      "-vf",
+      `crop=${adjustedCropWidth}:${videoHeight}:${adjustedCropX}:0`,
+      "output.mp4"
+    );
+
+    const data = ffmpeg.FS("readFile", "output.mp4");
+    const url = URL.createObjectURL(
+      new Blob([data.buffer], { type: "video/mp4" })
+    );
+    setOutputUrl(url);
+    setTab("generate");
+  }
+};
