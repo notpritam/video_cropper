@@ -44,7 +44,7 @@ export default function Home() {
     playbackRate: 1.0,
     loop: false,
   });
-  const [cropSize, setCropSize] = useState({ width: 200, height: 200 }); // Default crop size
+  const [cropSize, setCropSize] = useState({ width: 200, height: 100 }); // Default crop size
 
   const [position, setPosition] = useState({
     x: 0,
@@ -55,10 +55,15 @@ export default function Home() {
   const playerRef = useRef(null);
   const secondPlayer = useRef(null);
 
-  const handleDrag = (e, data) => {
-    // console.log("onDrag", data);
+  const [cornerPositions, setCornerPositions] = useState({
+    topLeft: { x: 0, y: 0 },
+    topRight: { x: 0, y: 0 },
+    bottomLeft: { x: 0, y: 0 },
+    bottomRight: { x: 0, y: 0 },
+  });
 
-    const container = containerRef.current; // Replace with your container's ID
+  const handleDrag = (e, data) => {
+    const container = containerRef.current;
     const scrollTop = container.scrollTop;
     const scrollHeight = container.scrollHeight - container.clientHeight;
     const scrollLeft = container.scrollLeft;
@@ -67,15 +72,33 @@ export default function Home() {
     const scrollPercentageVertical = (scrollTop / scrollHeight) * 100;
     const scrollPercentageHorizontal = (scrollLeft / scrollWidth) * 100;
 
+    const draggableElement = e.target;
+    // const { offsetWidth: width, offsetHeight: height } = draggableElement;
+    const width = cropSize.width;
+    const height = cropSize.height;
+
+    // Calculate the corner positions
+    const newCornerPositions = {
+      topLeft: { x: data.x, y: data.y },
+      topRight: { x: data.x + width, y: data.y },
+      bottomLeft: { x: data.x, y: data.y + height },
+      bottomRight: { x: data.x + width, y: data.y + height },
+    };
+
     // Update position state with scroll percentages included
     const newPosition = {
-      x: data.x + 60,
+      x: data.x,
       y: data.y,
       scrollPercentageVertical,
       scrollPercentageHorizontal,
     };
 
+    // Update the state with new position and corners
     setPosition(newPosition);
+    setCornerPositions(newCornerPositions);
+
+    // Optionally record the action with updated positions
+    // recordAction("position");
   };
 
   const handlePlay = () => {
@@ -195,7 +218,27 @@ export default function Home() {
       const inputFile = playerState.url;
       const cropX = position.x;
       const cropWidth = cropSize.width;
-      const videoHeight = 307;
+
+      // Get the video element and its dimensions
+      const videoElement = playerRef.current.getInternalPlayer();
+      const videoWidth = videoElement.videoWidth;
+      const videoHeight = videoElement.videoHeight;
+
+      // Calculate the crop width relative to the video's actual width
+      // Adjust cropX to ensure it doesn't exceed videoWidth
+      const adjustedCropX = Math.max(
+        0,
+        Math.min(cropX, videoWidth - cropWidth)
+      );
+      const adjustedCropWidth = (cropWidth / 541) * videoWidth;
+
+      console.log(
+        "Crop Video",
+        inputFile,
+        adjustedCropX,
+        adjustedCropWidth,
+        videoHeight
+      );
 
       ffmpeg.FS("writeFile", "input.mp4", await fetchFile(inputFile));
 
@@ -203,7 +246,7 @@ export default function Home() {
         "-i",
         "input.mp4",
         "-vf",
-        `crop=${cropWidth}:${videoHeight}:${cropX}:0`,
+        `crop=${adjustedCropWidth}:${videoHeight}:${adjustedCropX}:0`,
         "output.mp4"
       );
 
@@ -220,7 +263,7 @@ export default function Home() {
     <>
       <main className="flex max-h-screen min-h-screen min-w-screen bg-black  justify-center gap-8 items-center">
         <div className="bg-[#37393F] h-[668px] max-w-[1082px]  w-full rounded-lg gap-4 flex flex-col">
-          <div className="flex justify-between items-center px-4 pt-4">
+          <div className="flex justify-between items-center pt-4">
             <span className="font-bold text-white">Cropper</span>
 
             <div className="flex bg-[#45474E] rounded-md p-1 ">
@@ -241,7 +284,7 @@ export default function Home() {
             <div></div>
           </div>
           {tab == "preview" && (
-            <div className="grid grid-cols-2 w-full px-4 h-full">
+            <div className="grid grid-cols-2 w-full  h-full">
               <div className="w-full flex flex-col gap-4">
                 <div className="relative">
                   <Draggable
@@ -419,7 +462,7 @@ export default function Home() {
                     style={{
                       marginLeft: `-${position.x}px`, // Adjusted for horizontal scroll percentage
                     }}
-                    // width={position.x}
+                    width={541}
                     ref={secondPlayer}
                     height={"307px"}
                     muted={true}
@@ -435,7 +478,17 @@ export default function Home() {
                   <p>X: {position.x}</p>
                   <p>Y: {position.y}</p>
                   <p>
-                    Scroll Percentage: {position.scrollPercentageHorizontal}
+                    Top Left: {cornerPositions.topLeft.x} ,{" "}
+                    {cornerPositions.topLeft.y} <br />
+                    Top Right: {cornerPositions.topRight.x} ,{" "}
+                    {cornerPositions.topRight.y}
+                    <br />
+                    Bottom Left: {cornerPositions.bottomLeft.x} ,{" "}
+                    {cornerPositions.bottomLeft.y}
+                    <br />
+                    Bottom Right: {cornerPositions.bottomRight.x} ,{" "}
+                    {cornerPositions.bottomRight.y}
+                    <br />
                   </p>
                 </div>
 
