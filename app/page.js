@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactPlayer from "react-player";
 import { DndContext, useDraggable } from "@dnd-kit/core";
 import Draggable from "react-draggable";
@@ -7,6 +7,8 @@ import PlayImage from "@/public/play.svg";
 import VolumeImage from "@/public/volume.svg";
 import PreviewImage from "@/public/preview.svg";
 import Image from "next/image";
+// import ffmpeg, { fetchFile } from "ffmpeg";
+import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
 
 // player , cropper , generate
 
@@ -14,6 +16,7 @@ export default function Home() {
   const [tab, setTab] = useState("preview");
 
   const [cropper, setCropper] = useState(false);
+  const [outputUrl, setOutputUrl] = useState(null);
 
   const tabs = [
     {
@@ -162,6 +165,43 @@ export default function Home() {
         break;
       default:
         break;
+    }
+  };
+
+  useEffect(() => {
+    const loadFFmpeg = async () => {
+      if (!ffmpeg.isLoaded()) {
+        await ffmpeg.load();
+      }
+    };
+    loadFFmpeg();
+  }, []);
+
+  const cropVideo = async () => {
+    if (typeof window !== "undefined") {
+      const ffmpeg = createFFmpeg({ log: true });
+
+      await ffmpeg.load();
+      const inputFile = playerState.url;
+      const cropX = position.x;
+      const cropWidth = cropSize.width;
+      const videoHeight = cropSize.height;
+
+      ffmpeg.FS("writeFile", "input.mp4", await fetchFile(inputFile));
+
+      await ffmpeg.run(
+        "-i",
+        "input.mp4",
+        "-vf",
+        `crop=${cropWidth}:${videoHeight}:${cropX}:0`,
+        "output.mp4"
+      );
+
+      const data = ffmpeg.FS("readFile", "output.mp4");
+      const url = URL.createObjectURL(
+        new Blob([data.buffer], { type: "video/mp4" })
+      );
+      setOutputUrl(url);
     }
   };
 
@@ -413,6 +453,7 @@ export default function Home() {
                   <button
                     onClick={() => {
                       console.log(actionList);
+                      cropVideo();
                     }}
                     disabled={actionList.length == 0}
                     className="bg-[#7C36D6] text-white text-sm font-medium px-4 py-2 rounded-[10px] disabled:opacity-50"
@@ -431,7 +472,9 @@ export default function Home() {
                     Remove Cropper
                   </button> */}
                   <button className="bg-[#7C36D6] text-white text-sm font-medium px-4 py-2 rounded-[10px]">
-                    Download Preview
+                    <a href={outputUrl} download="cropped_video.mp4">
+                      Download Preview
+                    </a>
                   </button>
                 </div>
               </>
