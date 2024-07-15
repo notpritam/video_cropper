@@ -9,6 +9,7 @@ import PreviewImage from "@/public/preview.svg";
 import Image from "next/image";
 // import ffmpeg, { fetchFile } from "ffmpeg";
 import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
+import ReplayPlayer from "@/components/ReplayPlayer";
 
 // player , cropper , generate
 
@@ -18,6 +19,8 @@ export default function Home() {
 
   const [cropper, setCropper] = useState(false);
   const [outputUrl, setOutputUrl] = useState(null);
+  const [currentX, setCurrentX] = useState([]);
+  const [startTime, setStartTime] = useState(null);
 
   const tabs = [
     {
@@ -53,13 +56,6 @@ export default function Home() {
   });
   const playerRef = useRef(null);
   const secondPlayer = useRef(null);
-
-  const [cornerPositions, setCornerPositions] = useState({
-    topLeft: { x: 0, y: 0 },
-    topRight: { x: 0, y: 0 },
-    bottomLeft: { x: 0, y: 0 },
-    bottomRight: { x: 0, y: 0 },
-  });
 
   function filterAndCondense(data) {
     const result = [];
@@ -98,29 +94,19 @@ export default function Home() {
     const width = cropSize.width;
     const height = cropSize.height;
 
-    // Calculate the corner positions
-    const newCornerPositions = {
-      topLeft: { x: data.x, y: data.y },
-      topRight: { x: data.x + width, y: data.y },
-      bottomLeft: { x: data.x, y: data.y + height },
-      bottomRight: { x: data.x + width, y: data.y + height },
-    };
-
-    // Update position state with scroll percentages included
     const newPosition = {
       x: data.x,
       y: data.y,
       width: cropSize.width,
     };
 
-    // Update the state with new position and corners
     setPosition(newPosition);
-    setCornerPositions(newCornerPositions);
 
     // Optionally record the action with updated positions
-    // if (playerState.playing) {
-    //   recordAction("position");
-    // }
+    if (playerState.playing) {
+      // recordAction("position");
+      setCurrentX((prev) => [...prev, data.x]);
+    }
   };
 
   const handlePlay = () => {
@@ -174,11 +160,21 @@ export default function Home() {
     console.log("Action Recorded", action);
 
     const currentAction = {
-      timeStamps: playerState.played * playerState.duration,
+      timeStamps: {
+        startTime:
+          action === "position"
+            ? startTime
+            : playerState.played * playerState.duration,
+        endTime:
+          action === "position"
+            ? playerState.played * playerState.duration
+            : null,
+      },
       coordinates: position,
       volume: playerState.volume,
       playBackRate: playerState.playbackRate,
       action,
+      xChanges: [...currentX],
     };
 
     switch (action) {
@@ -210,278 +206,28 @@ export default function Home() {
           console.log("Not Recording this Action as Cropper is not enabled.");
         }
         break;
-      case "seek":
-        if (cropper) {
-          setActionList([...actionList, currentAction]);
-        } else {
-          console.log("Not Recording this Action as Cropper is not enabled.");
-        }
-        break;
       case "aspectRatio":
         setActionList([...actionList, currentAction]);
         break;
-      case "positionStart":
-      case "positionEnd":
+      case "position":
         if (cropper && playerState.playing) {
           setActionList([...actionList, currentAction]);
+          setCurrentX([]);
+          setStartTime(null);
         } else {
-          console.log("Not Recording this Action as Cropper is not enabled.");
+          console.log;
         }
-        break;
       default:
         break;
     }
   };
 
-  function parseVideoEditingData(data) {
-    let result = [];
-    let currentClip = null;
-    let positionStartTime = null;
-    let positionStartX = null;
-
-    data.forEach((entry, index) => {
-      switch (entry.action) {
-        case "play":
-          if (!currentClip) {
-            // Start a new clip if there's no current clip
-            currentClip = {
-              startTime: entry.timeStamps,
-              endTime: null,
-              coordinates: entry.coordinates,
-              volume: entry.volume,
-              playBackRate: entry.playBackRate,
-              scrollingEffect: false,
-              positionStartX: null,
-              positionEndX: null,
-            };
-          }
-          break;
-        case "pause":
-          if (currentClip) {
-            if (positionStartTime !== null) {
-              // Close the clip at positionStart time
-              currentClip.endTime = positionStartTime;
-              result.push(currentClip);
-              // Create a new clip from positionStart to pause
-              currentClip = {
-                startTime: positionStartTime,
-                endTime: entry.timeStamps,
-                coordinates: entry.coordinates,
-                volume: entry.volume,
-                playBackRate: entry.playBackRate,
-                scrollingEffect: false,
-                positionStartX: positionStartX,
-                positionEndX: null,
-              };
-            } else {
-              // Close the current clip
-              currentClip.endTime = entry.timeStamps;
-              result.push(currentClip);
-              currentClip = null;
-            }
-            positionStartTime = null;
-            positionStartX = null;
-          }
-          break;
-        case "positionStart":
-          if (currentClip) {
-            // Split the clip at positionStart
-            if (currentClip.startTime !== null) {
-              currentClip.endTime = entry.timeStamps;
-              result.push(currentClip);
-            }
-            positionStartTime = entry.timeStamps;
-            positionStartX = entry.coordinates.x;
-            currentClip = {
-              startTime: entry.timeStamps,
-              endTime: null,
-              coordinates: entry.coordinates,
-              volume: entry.volume,
-              playBackRate: entry.playBackRate,
-              scrollingEffect: false,
-              positionStartX: positionStartX,
-              positionEndX: null,
-            };
-          }
-          break;
-        case "positionEnd":
-          if (currentClip && positionStartTime !== null) {
-            // Close the current clip at positionEnd time and mark scrollingEffect as true
-            currentClip.endTime = entry.timeStamps;
-            currentClip.scrollingEffect = true;
-            currentClip.positionEndX = entry.coordinates.x;
-            result.push(currentClip);
-            currentClip = null;
-            positionStartTime = null;
-            positionStartX = null;
-          }
-          break;
-        default:
-          break;
-      }
-    });
-
-    // Handle the case where the last clip might not be closed
-    if (
-      currentClip &&
-      currentClip.startTime !== null &&
-      currentClip.endTime === null
-    ) {
-      currentClip.endTime = data[data.length - 1].timeStamps;
-      result.push(currentClip);
-    }
-
-    return result;
-  }
-
   const applyCropping = async () => {
-    if (typeof window !== "undefined") {
-      const ffmpeg = createFFmpeg({ log: true });
-      await ffmpeg.load();
-
-      const inputFile = playerState.url; // Your video URL or path
-      const videoElement = playerRef.current.getInternalPlayer();
-      const videoWidth = videoElement.videoWidth;
-      const videoHeight = videoElement.videoHeight;
-
-      // Load the input video
-      ffmpeg.FS("writeFile", "input.mp4", await fetchFile(inputFile));
-
-      const frameRate = 30; // Default to 30 if not found
-
-      console.log("Frame Rate:", frameRate);
-
-      // Generate crop data
-      const positionData = parseVideoEditingData(actionList);
-
-      console.log("Crop Data:", positionData);
-
-      const segmentFiles = [];
-
-      // Apply the cropping, panning, and scrolling effects using FFmpeg
-      for (const clip of positionData) {
-        let {
-          startTime,
-          endTime,
-          coordinates,
-          volume,
-          playBackRate,
-          scrollingEffect,
-          positionStartX,
-          positionEndX,
-        } = clip;
-
-        coordinates.width = (coordinates.width / 525) * videoWidth;
-        coordinates.x = Math.max(
-          0,
-          Math.min(coordinates.x, videoWidth - coordinates.width)
-        );
-
-        if (scrollingEffect) {
-          // Automatically enter demo values if scrolling effect is enabled
-          startTime = 0;
-          endTime = 3; // 10 seconds duration for demo
-          positionStartX = 0;
-          positionEndX = videoWidth - 100;
-          coordinates.width = coordinates.width || 400; // Fixed crop width for demo
-          volume = 1; // Default volume
-        }
-
-        console.log(
-          "Processing Clip:",
-          startTime,
-          endTime,
-          coordinates,
-          volume,
-          playBackRate,
-          scrollingEffect,
-          positionStartX,
-          positionEndX
-        );
-
-        const outputFile = `output_${startTime}_${endTime}.mp4`;
-
-        // Prepare crop command
-        const cropCommand = `crop=${coordinates.width}:${videoHeight}:${coordinates.x}:0`;
-
-        // Prepare scrolling effect if applicable
-        let scrollingCommand = "";
-        if (scrollingEffect) {
-          const duration = endTime - startTime;
-
-          // Calculate pan speed
-          const totalPanDistance = Math.abs(positionEndX - positionStartX);
-          const panSpeed = totalPanDistance / duration;
-
-          // Use pan filter for demo
-          scrollingCommand = `pan=x='min(max(0, ${positionStartX} + (${panSpeed} * t)), ${videoWidth} - ${coordinates.width})'|y=0`;
-
-          console.log("Scrolling Command:", scrollingCommand);
-        }
-
-        // Apply crop and panning effects
-        try {
-          await ffmpeg.run(
-            "-i",
-            "input.mp4",
-            "-vf",
-            `${cropCommand}${scrollingCommand ? `,${scrollingCommand}` : ""}`,
-            "-af",
-            `volume=${volume}`,
-            "-r",
-            `${frameRate}`,
-            "-ss",
-            `${startTime}`,
-            "-to",
-            `${endTime}`,
-            outputFile
-          );
-          segmentFiles.push(outputFile);
-        } catch (error) {
-          console.error(`Error processing clip ${outputFile}:`, error);
-        }
-      }
-
-      if (segmentFiles.length === 0) {
-        console.error("No segments created. Exiting.");
-        return;
-      }
-
-      // Create a file list for merging
-      const fileListContent = segmentFiles
-        .map((file) => `file '${file}'`)
-        .join("\n");
-      ffmpeg.FS("writeFile", "filelist.txt", fileListContent);
-      console.log("File list content:", fileListContent);
-
-      try {
-        // Concatenate files
-        await ffmpeg.run(
-          "-f",
-          "concat",
-          "-safe",
-          "0",
-          "-i",
-          "filelist.txt",
-          "-c",
-          "copy",
-          "final_output.mp4"
-        );
-
-        // Retrieve and set the final video URL
-        const data = ffmpeg.FS("readFile", "final_output.mp4");
-        const url = URL.createObjectURL(
-          new Blob([data.buffer], { type: "video/mp4" })
-        );
-        setOutputUrl(url);
-        setTab("generate");
-
-        console.log("Final output URL:", url);
-      } catch (error) {
-        console.error("Error concatenating files:", error);
-      }
-    }
+    console.log(actionList);
+    setTab("generate");
   };
+
+  const [replay, setReplay] = useState(false);
 
   return (
     <>
@@ -514,16 +260,12 @@ export default function Home() {
                   <Draggable
                     axis="x"
                     bounds="parent"
-                    onStart={
-                      cropper
-                        ? () => {
-                            recordAction("positionStart");
-                          }
-                        : null
-                    }
+                    onStart={() => {
+                      setStartTime(playerState.played * playerState.duration);
+                    }}
                     onDrag={handleDrag}
                     onStop={() => {
-                      recordAction("positionEnd");
+                      cropper && recordAction("position");
                     }}
                   >
                     <div
@@ -717,8 +459,13 @@ export default function Home() {
           )}
 
           {tab == "generate" && (
-            <div className="h-full px-4">
-              <ReactPlayer url={outputUrl} controls={true} />
+            <div className="h-full w-full flex justify-center px-4">
+              {/* <ReactPlayer url={outputUrl} controls={true} /> */}
+
+              <ReplayPlayer
+                recordedData={actionList}
+                videoDuration={playerState.duration}
+              />
             </div>
           )}
           <div className="border-[#494C55] w-full border-t-[1px] p-4 flex justify-between items-end">
