@@ -241,7 +241,14 @@ export default function Home() {
                 <>
                   <div
                     key={index}
-                    onClick={() => setTab(item.value)}
+                    onClick={() => {
+                      if (item.value == "generate" && actionList.length == 0) {
+                        alert("Please generate preview first.");
+                        return;
+                      } else {
+                        setTab(item.value);
+                      }
+                    }}
                     className={`${
                       tab == item.value ? "bg-[#37393F]" : ""
                     } flex cursor-pointer justify-center rounded-md items-center p-2 px-3`}
@@ -330,6 +337,7 @@ export default function Home() {
                         type="range"
                         className="w-full slider"
                         min={0}
+                        disabled={cropper && playerState.playing}
                         max={0.999999}
                         step="any"
                         value={playerState.played}
@@ -511,6 +519,15 @@ export default function Home() {
                     <a href={outputUrl} download="cropped_video.mp4">
                       Download Preview
                     </a>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTab("preview");
+                      setActionList([]);
+                    }}
+                    className="bg-[#7C36D6] text-white text-sm font-medium px-4 py-2 rounded-[10px]"
+                  >
+                    Remove Preview
                   </button>
                 </div>
               </>
