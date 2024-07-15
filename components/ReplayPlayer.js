@@ -3,7 +3,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import ReactPlayer from "react-player";
 
-const ReplayPlayer = ({ recordedData, videoDuration }) => {
+const ReplayPlayer = ({ recordedData }) => {
   const playerRef = useRef(null);
   const [xPosition, setXPosition] = useState(0);
   const [width, setWidth] = useState(0);
@@ -22,9 +22,10 @@ const ReplayPlayer = ({ recordedData, videoDuration }) => {
     loop: false,
   });
 
-  const [playVideo, setPlayVideo] = useState(false);
+  const [videoPlaying, setVideoPlaying] = useState(false);
 
-  useEffect(() => {
+  const playVideo = () => {
+    setVideoPlaying(true);
     console.log("Recorded Data", recordedData);
     if (!recordedData || recordedData.length === 0) return;
 
@@ -73,6 +74,10 @@ const ReplayPlayer = ({ recordedData, videoDuration }) => {
         playerRef.current.seekTo(timeStamps.startTime, "seconds");
         console.log(`Action: ${action}, Time: ${startTime}ms`);
 
+        if (index === recordedData.length - 1) {
+          setVideoPlaying(false);
+        }
+
         switch (action) {
           case "play":
             console.log("Play the video", record);
@@ -118,7 +123,7 @@ const ReplayPlayer = ({ recordedData, videoDuration }) => {
         setWidth(coordinates.width);
       }, finalWaitTime);
     });
-  }, [recordedData, playVideo]);
+  };
 
   const handleProgess = (state) => {
     if (!playerState.seeking) {
@@ -161,7 +166,15 @@ const ReplayPlayer = ({ recordedData, videoDuration }) => {
         />
       </div>
 
-      <button onClick={() => setPlayVideo(!playVideo)}>Play Video</button>
+      <div className="flex gap-8 items-center">
+        <button
+          disabled={videoPlaying}
+          className="bg-[#7C36D6] text-white text-sm font-medium px-4 py-2 rounded-[10px] disabled:opacity-50"
+          onClick={playVideo}
+        >
+          Play Video
+        </button>
+      </div>
     </>
   );
 };

@@ -328,7 +328,7 @@ export default function Home() {
                     <div className="w-full">
                       <input
                         type="range"
-                        className="w-full"
+                        className="w-full slider"
                         min={0}
                         max={0.999999}
                         step="any"
@@ -359,8 +359,9 @@ export default function Home() {
                       <input
                         type="range"
                         min={0}
+                        className="slider"
                         max={1}
-                        step={0.1}
+                        step="any"
                         value={playerState.volume}
                         onChange={(e) => {
                           setPlayerState({
@@ -421,8 +422,8 @@ export default function Home() {
               </div>
               <div
                 className={`flex flex-col ${
-                  cropper ? "" : "justify-between"
-                }  items-center w-full`}
+                  cropper ? "justify-start" : "justify-between"
+                }  items-center h-full w-full`}
               >
                 <span>Preview</span>
 
@@ -430,6 +431,7 @@ export default function Home() {
                   style={{
                     width: cropSize.width,
                     visibility: cropper ? "visible" : "hidden",
+                    display: cropper ? "block" : "none",
                   }}
                   className="overflow-hidden"
                 >
@@ -450,7 +452,7 @@ export default function Home() {
                 </div>
 
                 {!cropper && (
-                  <div className="h-full flex items-center justify-center w-full">
+                  <div className=" flex h-full items-center justify-center w-full">
                     <Image src={PreviewImage} alt="Preview Image" />
                   </div>
                 )}
@@ -459,7 +461,7 @@ export default function Home() {
           )}
 
           {tab == "generate" && (
-            <div className="h-full w-full flex justify-center px-4">
+            <div className="h-full w-full flex flex-col gap-12 items-center justify-center px-4">
               {/* <ReactPlayer url={outputUrl} controls={true} /> */}
 
               <ReplayPlayer
