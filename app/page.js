@@ -235,6 +235,19 @@ export default function Home() {
     return () => window.removeEventListener("click", handler);
   }, []);
 
+  const downloadJSON = () => {
+    const json = JSON.stringify(actionList, null, 2); // Convert list to JSON string
+    const blob = new Blob([json], { type: "application/json" }); // Create a Blob from the JSON string
+    const url = URL.createObjectURL(blob); // Create a URL for the Blob
+    const link = document.createElement("a"); // Create a link element
+    link.href = url;
+    link.download = "data.json"; // Name of the file to be downloaded
+    document.body.appendChild(link); // Append the link to the body
+    link.click(); // Trigger a click on the link
+    document.body.removeChild(link); // Remove the link from the body
+    URL.revokeObjectURL(url); // Clean up the URL object
+  };
+
   return (
     <>
       <main className="flex max-h-screen min-h-screen min-w-screen bg-black  justify-center gap-8 items-center">
@@ -547,6 +560,12 @@ export default function Home() {
             ) : (
               <>
                 <div className="flex gap-2">
+                  <button
+                    onClick={downloadJSON}
+                    className="bg-[#7C36D6] text-white text-sm font-medium px-4 py-2 rounded-[10px]"
+                  >
+                    Download Data
+                  </button>
                   <button
                     onClick={() => {
                       setTab("preview");
