@@ -6,10 +6,13 @@ import Draggable from "react-draggable";
 import PlayImage from "@/public/play.svg";
 import VolumeImage from "@/public/volume.svg";
 import PreviewImage from "@/public/preview.svg";
+import PauseImage from "@/public/pause.png";
 import Image from "next/image";
 // import ffmpeg, { fetchFile } from "ffmpeg";
 import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
 import ReplayPlayer from "@/components/ReplayPlayer";
+
+import DownImage from "@/public/down.svg";
 
 // player , cropper , generate
 
@@ -47,7 +50,7 @@ export default function Home() {
     playbackRate: 1.0,
     loop: false,
   });
-  const [cropSize, setCropSize] = useState({ width: 200, height: 100 }); // Default crop size
+  const [cropSize, setCropSize] = useState({ width: 200, height: 307 });
 
   const [position, setPosition] = useState({
     x: 0,
@@ -57,43 +60,7 @@ export default function Home() {
   const playerRef = useRef(null);
   const secondPlayer = useRef(null);
 
-  function filterAndCondense(data) {
-    const result = [];
-    let current = null;
-
-    for (const item of data) {
-      // If current is null or a new time or endTime group has started
-      if (
-        !current ||
-        item.time !== current.time ||
-        item.endTime !== current.endTime
-      ) {
-        if (current) {
-          result.push(current);
-        }
-        current = { ...item, xRange: [item.x, item.x] };
-      } else {
-        // Update the xRange to cover the new x value
-        current.xRange[1] = item.x;
-      }
-    }
-
-    // Add the last accumulated item
-    if (current) {
-      result.push(current);
-    }
-
-    // Optionally, transform xRange to a single x value if needed
-    return result.map((item) => {
-      const { xRange, ...rest } = item;
-      return { ...rest, xStart: xRange[0], xEnd: xRange[1] };
-    });
-  }
-
   const handleDrag = (e, data) => {
-    const width = cropSize.width;
-    const height = cropSize.height;
-
     const newPosition = {
       x: data.x,
       y: data.y,
@@ -102,28 +69,20 @@ export default function Home() {
 
     setPosition(newPosition);
 
-    // Optionally record the action with updated positions
     if (playerState.playing) {
-      // recordAction("position");
       setCurrentX((prev) => [...prev, data.x]);
     }
   };
 
   const handlePlay = () => {
-    console.log("onPlay", playerState.played);
-
     setPlayerState({ ...playerState, playing: true });
   };
 
   const handlePause = () => {
-    console.log("onPause");
-
     setPlayerState({ ...playerState, playing: false });
   };
 
   const handleDuration = (duration) => {
-    console.log("onDuration", duration);
-
     setPlayerState({ ...playerState, duration });
   };
 
@@ -137,6 +96,10 @@ export default function Home() {
     setPlayerState({ ...playerState, played: parseFloat(e.target.value) });
     playerRef.current.seekTo(parseFloat(e.target.value));
     secondPlayer.current.seekTo(parseFloat(e.target.value));
+
+    e.target.style.background = `linear-gradient(to right, white ${
+      e.target.value * 100
+    }%, #65676b ${e.target.value * 100}%)`;
   };
 
   const handleSeekMouseUp = (e) => {
@@ -227,7 +190,56 @@ export default function Home() {
     setTab("generate");
   };
 
-  const [replay, setReplay] = useState(false);
+  const [isPopupVisible, setIsPopupVisible] = useState(false);
+  const [aspectPopupVisible, setAspectPopupVisible] = useState(false);
+
+  const [aspectRatio, setAspectRatio] = useState("16:9");
+
+  const togglePopup = () => {
+    setIsPopupVisible(!isPopupVisible);
+  };
+  const toogleAspectPopup = () => {
+    setAspectPopupVisible(!aspectPopupVisible);
+  };
+
+  const handlePlaybackRateChange = (value) => {
+    setPlayerState({ ...playerState, playbackRate: value });
+    setIsPopupVisible(false);
+  };
+
+  const handleAspectRatioChange = (value) => {
+    const values = value.split(":");
+    const aspectRatio = parseFloat(values[0]) / parseFloat(values[1]);
+    setCropSize({
+      width: cropSize.height * aspectRatio,
+      height: cropSize.height,
+    });
+    setAspectPopupVisible(false);
+    setAspectRatio(value);
+  };
+
+  const playrateModalRef = useRef(null);
+  const aspectModalRef = useRef(null);
+
+  useEffect(() => {
+    function handler(event) {
+      console.log(
+        "click",
+        event.target,
+        aspectModalRef.current,
+        aspectModalRef.current?.contains(event.target)
+      );
+
+      if (!aspectModalRef.current?.contains(event.target)) {
+        setAspectPopupVisible(false);
+      }
+      if (!playrateModalRef.current?.contains(event.target)) {
+        setIsPopupVisible(false);
+      }
+    }
+    window.addEventListener("click", handler);
+    return () => window.removeEventListener("click", handler);
+  }, []);
 
   return (
     <>
@@ -319,7 +331,7 @@ export default function Home() {
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-2 items-center w-full ">
                     <Image
-                      className="cursor-pointer"
+                      className="cursor-pointer h-[18px] w-[18px]"
                       onClick={() => {
                         if (cropper) {
                           recordAction(playerState.playing ? "pause" : "play");
@@ -329,13 +341,18 @@ export default function Home() {
                           playing: !playerState.playing,
                         });
                       }}
-                      src={PlayImage}
+                      src={playerState.playing ? PauseImage : PlayImage}
                       alt="Pause Play Control"
                     />
                     <div className="w-full">
                       <input
                         type="range"
-                        className="w-full slider"
+                        className="w-full slider transition-all duration-200 ease-linear"
+                        style={{
+                          background: `linear-gradient(to right, white ${
+                            playerState.played * 100
+                          }%, #65676b ${playerState.played * 100}%)`,
+                        }}
                         min={0}
                         disabled={cropper && playerState.playing}
                         max={0.999999}
@@ -363,15 +380,29 @@ export default function Home() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Image src={VolumeImage} alt="Volume Control" />
+                      <Image
+                        src={VolumeImage}
+                        style={{
+                          opacity: playerState.volume > 0 ? 1 : 0.5,
+                        }}
+                        alt="Volume Control"
+                      />
                       <input
                         type="range"
+                        style={{
+                          background: `linear-gradient(to right, white ${
+                            playerState.volume * 100
+                          }%, #65676b ${playerState.volume * 100}%)`,
+                        }}
                         min={0}
                         className="slider"
                         max={1}
                         step="any"
                         value={playerState.volume}
                         onChange={(e) => {
+                          e.target.style.background = `linear-gradient(to right, white ${
+                            e.target.value * 100
+                          }%, #65676b ${e.target.value * 100}%)`;
                           setPlayerState({
                             ...playerState,
                             volume: parseFloat(e.target.value),
@@ -384,47 +415,57 @@ export default function Home() {
                 </div>
 
                 <div className="flex gap-4">
-                  <div>
-                    <select
-                      className="border-1 border-[#45474E] text-[white] px-[10px] py-[7px] bg-transparent"
-                      value={playerState.playbackRate}
-                      onChange={(e) => {
-                        setPlayerState({
-                          ...playerState,
-                          playbackRate: parseFloat(e.target.value),
-                        });
-                        recordAction("speed");
-                      }}
+                  <div className="flex gap-4 relative">
+                    <div
+                      className="flex px-[10px] max-h-[44px] py-2 gap-2 items-center border-[2px] rounded-[6px] border-[#45474E] cursor-pointer relative"
+                      onClick={togglePopup}
+                      ref={playrateModalRef}
                     >
-                      {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((value) => (
-                        <option
-                          className="bg-transparent "
-                          key={value}
-                          value={value}
-                        >
-                          {value}x
-                        </option>
-                      ))}
-                    </select>
+                      <span>Playback speed</span>
+                      <span className="opacity-50">
+                        {playerState.playbackRate}x
+                      </span>
+                      <Image src={DownImage} alt="Dropdown Image" />
+                      {isPopupVisible && (
+                        <div className="absolute custom-scrollbar top-[44px] left-0 right-0 max-h-[150px] overflow-y-scroll bg-[#45474E] w-full mt-2 rounded-[6px] border-[2px] border-[#45474E] z-10">
+                          {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(
+                            (value) => (
+                              <div
+                                key={value}
+                                className="py-[7px] px-[10px] hover:bg-gray-700 cursor-pointer"
+                                onClick={() => handlePlaybackRateChange(value)}
+                              >
+                                {value}x
+                              </div>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-
-                  <div>
-                    <select
-                      className="border-1 border-[#45474E] text-[white] px-[10px] py-[7px] bg-transparent"
-                      value={(cropSize.width / cropSize.height).toFixed(2)}
-                      onChange={(e) => {
-                        const aspectRatio = parseFloat(e.target.value);
-                        setCropSize({
-                          width: cropSize.height * aspectRatio,
-                          height: cropSize.height,
-                        });
-                        recordAction("aspectRatio");
-                      }}
+                  <div className="flex gap-4 relative">
+                    <div
+                      className="flex px-[10px] max-h-[44px] py-2 gap-2 items-center border-[2px] rounded-[6px] border-[#45474E] cursor-pointer relative"
+                      onClick={toogleAspectPopup}
+                      ref={aspectModalRef}
                     >
-                      <option value={(16 / 9).toFixed(2)}>16:9</option>
-                      <option value={(4 / 3).toFixed(2)}>4:3</option>
-                      <option value="1.00">1:1</option>
-                    </select>
+                      <span>Cropper Aspect Ratio</span>
+                      <span className="opacity-50">{aspectRatio}</span>
+                      <Image src={DownImage} alt="Dropdown Image" />
+                      {aspectPopupVisible && (
+                        <div className="absolute custom-scrollbar top-[44px] left-0 right-0 max-h-[150px] overflow-y-scroll bg-[#45474E] w-full mt-2 rounded-[6px] border-[2px] border-[#45474E] z-10">
+                          {["16:9", "1:1", "4:3", "9:16"].map((value) => (
+                            <div
+                              key={value}
+                              className="py-[7px] px-[10px] hover:bg-gray-700 cursor-pointer"
+                              onClick={() => handleAspectRatioChange(value)}
+                            >
+                              {value}x
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -445,7 +486,7 @@ export default function Home() {
                 >
                   <ReactPlayer
                     style={{
-                      marginLeft: `-${position.x}px`, // Adjusted for horizontal scroll percentage
+                      marginLeft: `-${position.x}px`,
                     }}
                     width={525}
                     ref={secondPlayer}
@@ -515,11 +556,6 @@ export default function Home() {
             ) : (
               <>
                 <div className="flex gap-2">
-                  <button className="bg-[#7C36D6] text-white text-sm font-medium px-4 py-2 rounded-[10px]">
-                    <a href={outputUrl} download="cropped_video.mp4">
-                      Download Preview
-                    </a>
-                  </button>
                   <button
                     onClick={() => {
                       setTab("preview");
