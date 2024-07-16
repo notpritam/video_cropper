@@ -1,27 +1,21 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import ReactPlayer from "react-player";
-import { DndContext, useDraggable } from "@dnd-kit/core";
 import Draggable from "react-draggable";
 import PlayImage from "@/public/play.svg";
 import VolumeImage from "@/public/volume.svg";
 import PreviewImage from "@/public/preview.svg";
 import PauseImage from "@/public/pause.png";
 import Image from "next/image";
-// import ffmpeg, { fetchFile } from "ffmpeg";
-import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
 import ReplayPlayer from "@/components/ReplayPlayer";
 
 import DownImage from "@/public/down.svg";
-
-// player , cropper , generate
 
 export default function Home() {
   const [tab, setTab] = useState("preview");
   const containerRef = useRef(null);
 
   const [cropper, setCropper] = useState(false);
-  const [outputUrl, setOutputUrl] = useState(null);
   const [currentX, setCurrentX] = useState([]);
   const [startTime, setStartTime] = useState(null);
 
@@ -299,9 +293,7 @@ export default function Home() {
                         <div
                           key={index}
                           className="border-[0.5px] opacity-40 border-dashed border-white flex justify-center items-center"
-                        >
-                          {/* {index} */}
-                        </div>
+                        ></div>
                       ))}
                     </div>
                   </Draggable>
@@ -543,7 +535,6 @@ export default function Home() {
                   <button
                     onClick={() => {
                       console.log(actionList);
-                      // cropVideo();
                       applyCropping();
                     }}
                     disabled={actionList.length == 0}
