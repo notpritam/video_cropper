@@ -6,9 +6,13 @@ import Draggable from "react-draggable";
 import PlayImage from "@/public/play.svg";
 import VolumeImage from "@/public/volume.svg";
 import PreviewImage from "@/public/preview.svg";
+import PauseImage from "@/public/pause.png";
 import Image from "next/image";
 // import ffmpeg, { fetchFile } from "ffmpeg";
 import { createFFmpeg, fetchFile } from "@ffmpeg/ffmpeg";
+import ReplayPlayer from "@/components/ReplayPlayer";
+
+import DownImage from "@/public/down.svg";
 
 // player , cropper , generate
 
@@ -18,6 +22,8 @@ export default function Home() {
 
   const [cropper, setCropper] = useState(false);
   const [outputUrl, setOutputUrl] = useState(null);
+  const [currentX, setCurrentX] = useState([]);
+  const [startTime, setStartTime] = useState(null);
 
   const tabs = [
     {
@@ -44,7 +50,7 @@ export default function Home() {
     playbackRate: 1.0,
     loop: false,
   });
-  const [cropSize, setCropSize] = useState({ width: 200, height: 100 }); // Default crop size
+  const [cropSize, setCropSize] = useState({ width: 200, height: 307 });
 
   const [position, setPosition] = useState({
     x: 0,
@@ -54,90 +60,29 @@ export default function Home() {
   const playerRef = useRef(null);
   const secondPlayer = useRef(null);
 
-  const [cornerPositions, setCornerPositions] = useState({
-    topLeft: { x: 0, y: 0 },
-    topRight: { x: 0, y: 0 },
-    bottomLeft: { x: 0, y: 0 },
-    bottomRight: { x: 0, y: 0 },
-  });
-
-  function filterAndCondense(data) {
-    const result = [];
-    let current = null;
-
-    for (const item of data) {
-      // If current is null or a new time or endTime group has started
-      if (
-        !current ||
-        item.time !== current.time ||
-        item.endTime !== current.endTime
-      ) {
-        if (current) {
-          result.push(current);
-        }
-        current = { ...item, xRange: [item.x, item.x] };
-      } else {
-        // Update the xRange to cover the new x value
-        current.xRange[1] = item.x;
-      }
-    }
-
-    // Add the last accumulated item
-    if (current) {
-      result.push(current);
-    }
-
-    // Optionally, transform xRange to a single x value if needed
-    return result.map((item) => {
-      const { xRange, ...rest } = item;
-      return { ...rest, xStart: xRange[0], xEnd: xRange[1] };
-    });
-  }
-
   const handleDrag = (e, data) => {
-    const width = cropSize.width;
-    const height = cropSize.height;
-
-    // Calculate the corner positions
-    const newCornerPositions = {
-      topLeft: { x: data.x, y: data.y },
-      topRight: { x: data.x + width, y: data.y },
-      bottomLeft: { x: data.x, y: data.y + height },
-      bottomRight: { x: data.x + width, y: data.y + height },
-    };
-
-    // Update position state with scroll percentages included
     const newPosition = {
       x: data.x,
       y: data.y,
       width: cropSize.width,
     };
 
-    // Update the state with new position and corners
     setPosition(newPosition);
-    setCornerPositions(newCornerPositions);
 
-    // Optionally record the action with updated positions
-    // if (playerState.playing) {
-    //   recordAction("position");
-    // }
+    if (playerState.playing) {
+      setCurrentX((prev) => [...prev, data.x]);
+    }
   };
 
   const handlePlay = () => {
-    console.log("onPlay", playerState.played);
-
     setPlayerState({ ...playerState, playing: true });
   };
 
   const handlePause = () => {
-    console.log("onPause");
-
     setPlayerState({ ...playerState, playing: false });
   };
 
   const handleDuration = (duration) => {
-    console.log("onDuration", duration);
-
     setPlayerState({ ...playerState, duration });
   };
 
@@ -151,6 +96,10 @@ export default function Home() {
     setPlayerState({ ...playerState, played: parseFloat(e.target.value) });
     playerRef.current.seekTo(parseFloat(e.target.value));
     secondPlayer.current.seekTo(parseFloat(e.target.value));
+
+    e.target.style.background = `linear-gradient(to right, white ${
+      e.target.value * 100
+    }%, #65676b ${e.target.value * 100}%)`;
   };
 
   const handleSeekMouseUp = (e) => {
@@ -174,11 +123,21 @@ export default function Home() {
     console.log("Action Recorded", action);
 
     const currentAction = {
-      timeStamps: playerState.played * playerState.duration,
+      timeStamps: {
+        startTime:
+          action === "position"
+            ? startTime
+            : playerState.played * playerState.duration,
+        endTime:
+          action === "position"
+            ? playerState.played * playerState.duration
+            : null,
+      },
       coordinates: position,
       volume: playerState.volume,
       playBackRate: playerState.playbackRate,
       action,
+      xChanges: [...currentX],
     };
 
     switch (action) {
@@ -210,278 +169,77 @@ export default function Home() {
           console.log("Not Recording this Action as Cropper is not enabled.");
         }
         break;
-      case "seek":
-        if (cropper) {
-          setActionList([...actionList, currentAction]);
-        } else {
-          console.log("Not Recording this Action as Cropper is not enabled.");
-        }
-        break;
       case "aspectRatio":
         setActionList([...actionList, currentAction]);
         break;
-      case "positionStart":
-      case "positionEnd":
+      case "position":
         if (cropper && playerState.playing) {
           setActionList([...actionList, currentAction]);
+          setCurrentX([]);
+          setStartTime(null);
         } else {
-          console.log("Not Recording this Action as Cropper is not enabled.");
+          console.log;
         }
-        break;
       default:
         break;
     }
   };
 
-  function parseVideoEditingData(data) {
-    let result = [];
-    let currentClip = null;
-    let positionStartTime = null;
-    let positionStartX = null;
-
-    data.forEach((entry, index) => {
-      switch (entry.action) {
-        case "play":
-          if (!currentClip) {
-            // Start a new clip if there's no current clip
-            currentClip = {
-              startTime: entry.timeStamps,
-              endTime: null,
-              coordinates: entry.coordinates,
-              volume: entry.volume,
-              playBackRate: entry.playBackRate,
-              scrollingEffect: false,
-              positionStartX: null,
-              positionEndX: null,
-            };
-          }
-          break;
-        case "pause":
-          if (currentClip) {
-            if (positionStartTime !== null) {
-              // Close the clip at positionStart time
-              currentClip.endTime = positionStartTime;
-              result.push(currentClip);
-              // Create a new clip from positionStart to pause
-              currentClip = {
-                startTime: positionStartTime,
-                endTime: entry.timeStamps,
-                coordinates: entry.coordinates,
-                volume: entry.volume,
-                playBackRate: entry.playBackRate,
-                scrollingEffect: false,
-                positionStartX: positionStartX,
-                positionEndX: null,
-              };
-            } else {
-              // Close the current clip
-              currentClip.endTime = entry.timeStamps;
-              result.push(currentClip);
-              currentClip = null;
-            }
-            positionStartTime = null;
-            positionStartX = null;
-          }
-          break;
-        case "positionStart":
-          if (currentClip) {
-            // Split the clip at positionStart
-            if (currentClip.startTime !== null) {
-              currentClip.endTime = entry.timeStamps;
-              result.push(currentClip);
-            }
-            positionStartTime = entry.timeStamps;
-            positionStartX = entry.coordinates.x;
-            currentClip = {
-              startTime: entry.timeStamps,
-              endTime: null,
-              coordinates: entry.coordinates,
-              volume: entry.volume,
-              playBackRate: entry.playBackRate,
-              scrollingEffect: false,
-              positionStartX: positionStartX,
-              positionEndX: null,
-            };
-          }
-          break;
-        case "positionEnd":
-          if (currentClip && positionStartTime !== null) {
-            // Close the current clip at positionEnd time and mark scrollingEffect as true
-            currentClip.endTime = entry.timeStamps;
-            currentClip.scrollingEffect = true;
-            currentClip.positionEndX = entry.coordinates.x;
-            result.push(currentClip);
-            currentClip = null;
-            positionStartTime = null;
-            positionStartX = null;
-          }
-          break;
-        default:
-          break;
-      }
-    });
-
-    // Handle the case where the last clip might not be closed
-    if (
-      currentClip &&
-      currentClip.startTime !== null &&
-      currentClip.endTime === null
-    ) {
-      currentClip.endTime = data[data.length - 1].timeStamps;
-      result.push(currentClip);
-    }
-
-    return result;
-  }
-
   const applyCropping = async () => {
-    if (typeof window !== "undefined") {
-      const ffmpeg = createFFmpeg({ log: true });
-      await ffmpeg.load();
+    console.log(actionList);
+    setTab("generate");
+  };
 
-      const inputFile = playerState.url; // Your video URL or path
-      const videoElement = playerRef.current.getInternalPlayer();
-      const videoWidth = videoElement.videoWidth;
-      const videoHeight = videoElement.videoHeight;
+  const [isPopupVisible, setIsPopupVisible] = useState(false);
+  const [aspectPopupVisible, setAspectPopupVisible] = useState(false);
 
-      // Load the input video
-      ffmpeg.FS("writeFile", "input.mp4", await fetchFile(inputFile));
+  const [aspectRatio, setAspectRatio] = useState("16:9");
 
-      const frameRate = 30; // Default to 30 if not found
+  const togglePopup = () => {
+    setIsPopupVisible(!isPopupVisible);
+  };
+  const toogleAspectPopup = () => {
+    setAspectPopupVisible(!aspectPopupVisible);
+  };
 
-      console.log("Frame Rate:", frameRate);
+  const handlePlaybackRateChange = (value) => {
+    setPlayerState({ ...playerState, playbackRate: value });
+    setIsPopupVisible(false);
+  };
 
-      // Generate crop data
-      const positionData = parseVideoEditingData(actionList);
+  const handleAspectRatioChange = (value) => {
+    const values = value.split(":");
+    const aspectRatio = parseFloat(values[0]) / parseFloat(values[1]);
+    setCropSize({
+      width: cropSize.height * aspectRatio,
+      height: cropSize.height,
+    });
+    setAspectPopupVisible(false);
+    setAspectRatio(value);
+  };
 
-      console.log("Crop Data:", positionData);
+  const playrateModalRef = useRef(null);
+  const aspectModalRef = useRef(null);
 
-      const segmentFiles = [];
+  useEffect(() => {
+    function handler(event) {
+      console.log(
+        "click",
+        event.target,
+        aspectModalRef.current,
+        aspectModalRef.current?.contains(event.target)
+      );
 
-      // Apply the cropping, panning, and scrolling effects using FFmpeg
-      for (const clip of positionData) {
-        let {
-          startTime,
-          endTime,
-          coordinates,
-          volume,
-          playBackRate,
-          scrollingEffect,
-          positionStartX,
-          positionEndX,
-        } = clip;
-
-        coordinates.width = (coordinates.width / 525) * videoWidth;
-        coordinates.x = Math.max(
-          0,
-          Math.min(coordinates.x, videoWidth - coordinates.width)
-        );
-
-        if (scrollingEffect) {
-          // Automatically enter demo values if scrolling effect is enabled
-          startTime = 0;
-          endTime = 3; // 10 seconds duration for demo
-          positionStartX = 0;
-          positionEndX = videoWidth - 100;
-          coordinates.width = coordinates.width || 400; // Fixed crop width for demo
-          volume = 1; // Default volume
-        }
-
-        console.log(
-          "Processing Clip:",
-          startTime,
-          endTime,
-          coordinates,
-          volume,
-          playBackRate,
-          scrollingEffect,
-          positionStartX,
-          positionEndX
-        );
-
-        const outputFile = `output_${startTime}_${endTime}.mp4`;
-
-        // Prepare crop command
-        const cropCommand = `crop=${coordinates.width}:${videoHeight}:${coordinates.x}:0`;
-
-        // Prepare scrolling effect if applicable
-        let scrollingCommand = "";
-        if (scrollingEffect) {
-          const duration = endTime - startTime;
-
-          // Calculate pan speed
-          const totalPanDistance = Math.abs(positionEndX - positionStartX);
-          const panSpeed = totalPanDistance / duration;
-
-          // Use pan filter for demo
-          scrollingCommand = `pan=x='min(max(0, ${positionStartX} + (${panSpeed} * t)), ${videoWidth} - ${coordinates.width})'|y=0`;
-
-          console.log("Scrolling Command:", scrollingCommand);
-        }
-
-        // Apply crop and panning effects
-        try {
-          await ffmpeg.run(
-            "-i",
-            "input.mp4",
-            "-vf",
-            `${cropCommand}${scrollingCommand ? `,${scrollingCommand}` : ""}`,
-            "-af",
-            `volume=${volume}`,
-            "-r",
-            `${frameRate}`,
-            "-ss",
-            `${startTime}`,
-            "-to",
-            `${endTime}`,
-            outputFile
-          );
-          segmentFiles.push(outputFile);
-        } catch (error) {
-          console.error(`Error processing clip ${outputFile}:`, error);
-        }
+      if (!aspectModalRef.current?.contains(event.target)) {
+        setAspectPopupVisible(false);
       }
-
-      if (segmentFiles.length === 0) {
-        console.error("No segments created. Exiting.");
-        return;
-      }
-
-      // Create a file list for merging
-      const fileListContent = segmentFiles
-        .map((file) => `file '${file}'`)
-        .join("\n");
-      ffmpeg.FS("writeFile", "filelist.txt", fileListContent);
-      console.log("File list content:", fileListContent);
-
-      try {
-        // Concatenate files
-        await ffmpeg.run(
-          "-f",
-          "concat",
-          "-safe",
-          "0",
-          "-i",
-          "filelist.txt",
-          "-c",
-          "copy",
-          "final_output.mp4"
-        );
-
-        // Retrieve and set the final video URL
-        const data = ffmpeg.FS("readFile", "final_output.mp4");
-        const url = URL.createObjectURL(
-          new Blob([data.buffer], { type: "video/mp4" })
-        );
-        setOutputUrl(url);
-        setTab("generate");
-
-        console.log("Final output URL:", url);
-      } catch (error) {
-        console.error("Error concatenating files:", error);
+      if (!playrateModalRef.current?.contains(event.target)) {
+        setIsPopupVisible(false);
       }
     }
-  };
+    window.addEventListener("click", handler);
+    return () => window.removeEventListener("click", handler);
+  }, []);
 
   return (
     <>
@@ -495,7 +253,14 @@ export default function Home() {
                 <>
                   <div
                     key={index}
-                    onClick={() => setTab(item.value)}
+                    onClick={() => {
+                      if (item.value == "generate" && actionList.length == 0) {
+                        alert("Please generate preview first.");
+                        return;
+                      } else {
+                        setTab(item.value);
+                      }
+                    }}
                     className={`${
                       tab == item.value ? "bg-[#37393F]" : ""
                     } flex cursor-pointer justify-center rounded-md items-center p-2 px-3`}
@@ -514,16 +279,12 @@ export default function Home() {
                   <Draggable
                     axis="x"
                     bounds="parent"
-                    onStart={
-                      cropper
-                        ? () => {
-                            recordAction("positionStart");
-                          }
-                        : null
-                    }
+                    onStart={() => {
+                      setStartTime(playerState.played * playerState.duration);
+                    }}
                     onDrag={handleDrag}
                     onStop={() => {
-                      recordAction("positionEnd");
+                      cropper && recordAction("position");
                     }}
                   >
                     <div
@@ -570,7 +331,7 @@ export default function Home() {
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-2 items-center w-full ">
                     <Image
-                      className="cursor-pointer"
+                      className="cursor-pointer h-[18px] w-[18px]"
                       onClick={() => {
                         if (cropper) {
                           recordAction(playerState.playing ? "pause" : "play");
@@ -580,14 +341,20 @@ export default function Home() {
                           playing: !playerState.playing,
                         });
                       }}
-                      src={PlayImage}
+                      src={playerState.playing ? PauseImage : PlayImage}
                       alt="Pause Play Control"
                     />
                     <div className="w-full">
                       <input
                         type="range"
-                        className="w-full"
+                        className="w-full slider transition-all duration-200 ease-linear"
+                        style={{
+                          background: `linear-gradient(to right, white ${
+                            playerState.played * 100
+                          }%, #65676b ${playerState.played * 100}%)`,
+                        }}
                         min={0}
+                        disabled={cropper && playerState.playing}
                         max={0.999999}
                         step="any"
                         value={playerState.played}
@@ -613,14 +380,29 @@ export default function Home() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Image src={VolumeImage} alt="Volume Control" />
+                      <Image
+                        src={VolumeImage}
+                        style={{
+                          opacity: playerState.volume > 0 ? 1 : 0.5,
+                        }}
+                        alt="Volume Control"
+                      />
                       <input
                         type="range"
+                        style={{
+                          background: `linear-gradient(to right, white ${
+                            playerState.volume * 100
+                          }%, #65676b ${playerState.volume * 100}%)`,
+                        }}
                         min={0}
+                        className="slider"
                         max={1}
-                        step={0.1}
+                        step="any"
                         value={playerState.volume}
                         onChange={(e) => {
+                          e.target.style.background = `linear-gradient(to right, white ${
+                            e.target.value * 100
+                          }%, #65676b ${e.target.value * 100}%)`;
                           setPlayerState({
                             ...playerState,
                             volume: parseFloat(e.target.value),
@@ -633,54 +415,64 @@ export default function Home() {
                 </div>
 
                 <div className="flex gap-4">
-                  <div>
-                    <select
-                      className="border-1 border-[#45474E] text-[white] px-[10px] py-[7px] bg-transparent"
-                      value={playerState.playbackRate}
-                      onChange={(e) => {
-                        setPlayerState({
-                          ...playerState,
-                          playbackRate: parseFloat(e.target.value),
-                        });
-                        recordAction("speed");
-                      }}
+                  <div className="flex gap-4 relative">
+                    <div
+                      className="flex px-[10px] max-h-[44px] py-2 gap-2 items-center border-[2px] rounded-[6px] border-[#45474E] cursor-pointer relative"
+                      onClick={togglePopup}
+                      ref={playrateModalRef}
                     >
-                      {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((value) => (
-                        <option
-                          className="bg-transparent "
-                          key={value}
-                          value={value}
-                        >
-                          {value}x
-                        </option>
-                      ))}
-                    </select>
+                      <span>Playback speed</span>
+                      <span className="opacity-50">
+                        {playerState.playbackRate}x
+                      </span>
+                      <Image src={DownImage} alt="Dropdown Image" />
+                      {isPopupVisible && (
+                        <div className="absolute custom-scrollbar top-[44px] left-0 right-0 max-h-[150px] overflow-y-scroll bg-[#45474E] w-full mt-2 rounded-[6px] border-[2px] border-[#45474E] z-10">
+                          {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(
+                            (value) => (
+                              <div
+                                key={value}
+                                className="py-[7px] px-[10px] hover:bg-gray-700 cursor-pointer"
+                                onClick={() => handlePlaybackRateChange(value)}
+                              >
+                                {value}x
+                              </div>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-
-                  <div>
-                    <select
-                      className="border-1 border-[#45474E] text-[white] px-[10px] py-[7px] bg-transparent"
-                      value={(cropSize.width / cropSize.height).toFixed(2)}
-                      onChange={(e) => {
-                        const aspectRatio = parseFloat(e.target.value);
-                        setCropSize({
-                          width: cropSize.height * aspectRatio,
-                          height: cropSize.height,
-                        });
-                        recordAction("aspectRatio");
-                      }}
+                  <div className="flex gap-4 relative">
+                    <div
+                      className="flex px-[10px] max-h-[44px] py-2 gap-2 items-center border-[2px] rounded-[6px] border-[#45474E] cursor-pointer relative"
+                      onClick={toogleAspectPopup}
+                      ref={aspectModalRef}
                     >
-                      <option value={(16 / 9).toFixed(2)}>16:9</option>
-                      <option value={(4 / 3).toFixed(2)}>4:3</option>
-                      <option value="1.00">1:1</option>
-                    </select>
+                      <span>Cropper Aspect Ratio</span>
+                      <span className="opacity-50">{aspectRatio}</span>
+                      <Image src={DownImage} alt="Dropdown Image" />
+                      {aspectPopupVisible && (
+                        <div className="absolute custom-scrollbar top-[44px] left-0 right-0 max-h-[150px] overflow-y-scroll bg-[#45474E] w-full mt-2 rounded-[6px] border-[2px] border-[#45474E] z-10">
+                          {["16:9", "1:1", "4:3", "9:16"].map((value) => (
+                            <div
+                              key={value}
+                              className="py-[7px] px-[10px] hover:bg-gray-700 cursor-pointer"
+                              onClick={() => handleAspectRatioChange(value)}
+                            >
+                              {value}x
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
               <div
                 className={`flex flex-col ${
-                  cropper ? "" : "justify-between"
-                }  items-center w-full`}
+                  cropper ? "justify-start" : "justify-between"
+                }  items-center h-full w-full`}
               >
                 <span>Preview</span>
 
@@ -688,12 +480,13 @@ export default function Home() {
                   style={{
                     width: cropSize.width,
                     visibility: cropper ? "visible" : "hidden",
+                    display: cropper ? "block" : "none",
                   }}
                   className="overflow-hidden"
                 >
                   <ReactPlayer
                     style={{
-                      marginLeft: `-${position.x}px`, // Adjusted for horizontal scroll percentage
+                      marginLeft: `-${position.x}px`,
                     }}
                     width={525}
                     ref={secondPlayer}
@@ -708,7 +501,7 @@ export default function Home() {
                 </div>
 
                 {!cropper && (
-                  <div className="h-full flex items-center justify-center w-full">
+                  <div className=" flex h-full items-center justify-center w-full">
                     <Image src={PreviewImage} alt="Preview Image" />
                   </div>
                 )}
@@ -717,8 +510,13 @@ export default function Home() {
           )}
 
           {tab == "generate" && (
-            <div className="h-full px-4">
-              <ReactPlayer url={outputUrl} controls={true} />
+            <div className="h-full w-full flex flex-col gap-12 items-center justify-center px-4">
+              {/* <ReactPlayer url={outputUrl} controls={true} /> */}
+
+              <ReplayPlayer
+                recordedData={actionList}
+                videoDuration={playerState.duration}
+              />
             </div>
           )}
           <div className="border-[#494C55] w-full border-t-[1px] p-4 flex justify-between items-end">
@@ -758,10 +556,14 @@ export default function Home() {
             ) : (
               <>
                 <div className="flex gap-2">
-                  <button className="bg-[#7C36D6] text-white text-sm font-medium px-4 py-2 rounded-[10px]">
-                    <a href={outputUrl} download="cropped_video.mp4">
-                      Download Preview
-                    </a>
+                  <button
+                    onClick={() => {
+                      setTab("preview");
+                      setActionList([]);
+                    }}
+                    className="bg-[#7C36D6] text-white text-sm font-medium px-4 py-2 rounded-[10px]"
+                  >
+                    Remove Preview
                   </button>
                 </div>
               </>
